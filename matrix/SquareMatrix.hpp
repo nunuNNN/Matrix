@@ -542,6 +542,234 @@ SquareMatrix <Type, M> choleskyInv(const SquareMatrix<Type, M> & A)
     return L_inv.T()*L_inv;
 }
 
+/**
+ * 
+ */
+template<typename Type>
+static inline Type hypot(Type a, Type b)
+{
+	a = fabs(a);
+	b = fabs(b);
+	if (a > b) {
+		b /= a;
+		return a*sqrt(1 + b*b);
+	}
+	if (b > 0) {
+		a /= b;
+		return b*sqrt(1 + a*a);
+	}
+	return 0;
+}
+
+/**
+ * 
+ */
+template<typename Type>
+void swap(Type &a,Type &b) noexcept
+{
+    // Type temp = _GLIBCXX_MOVE(a);
+    // a = _GLIBCXX_MOVE(b);
+    // b = _GLIBCXX_MOVE(temp);
+
+    Type temp = a;
+    a = b;
+    b = temp;
+}
+
+/**
+ * Matrix for eigenvalues
+ *
+ * Note: mat must be positive definite
+ */
+template<typename Type, size_t M>
+int eigenvalues(const SquareMatrix<Type, M> &mat, Vector<Type, M>  &eigen_values, SquareMatrix<Type, M> &eigen_vectors, bool sort_ = true)
+{
+    if (M <= 1)
+    {
+        printf("mat must be square and it should be a real symmetric matrix\n");
+        return -1;
+    }
+
+
+    eigen_values.setZero();
+    Vector<Type, M*M> V; V.setZero();
+    for (size_t i = 0; i < M; ++i)
+    {
+        V(M * i + i) = 1;
+        eigen_values(i) = mat(i, i);
+    }
+
+    size_t maxIters{ M * M * 30 };
+    Type mv{0};
+    Vector<size_t, M> indR, indC;
+    Vector<Type, M*M> A;
+	for (size_t i = 0; i < M; ++i) {
+        for (size_t j = 0; j < M; ++j)
+        {
+            A(i * M + j) = mat(i, j);
+        }
+	}
+
+    for (size_t k = 0; k < M; ++k)
+    {
+        size_t m, i;
+        if (k < M - 1)
+        {
+            for (m = k + 1, mv = fabs(A(M*k + m)), i = k +2; i < M; i++)
+            {
+                Type val = fabs(A(M*k + i));
+
+                if (mv < val)
+                {
+                    mv = val, m = i;
+                }
+            }
+            indR(k) = m;
+        }
+
+        if (k > 0)
+        {
+            for (m = 0, mv = fabs(A(k)), i = 1; i < k; i++)
+            {
+                Type val = fabs(A(M*i + k));
+
+                if (mv < val)
+                {
+                    mv = val, m = i;
+                }
+            }
+            indC(k) = m;
+        }
+    }
+
+    for (size_t iters = 0; iters < maxIters; iters++)
+    {
+        size_t k, i, m;
+        // find index (k,l) of pivot p
+        for (k = 0, mv = fabs(A(indR(0))), i = 1; i < M - 1; i++) 
+        {
+            Type val = fabs(A(M*i + indR(i)));
+            if (mv < val)
+            {
+                mv = val, k = i;
+            }
+        }
+
+        size_t l = indR(k);
+        for (i = 1; i < M; i++) 
+        {
+            Type val = fabs(A(M*indC(i) + i));
+            if (mv < val)
+            {
+                mv = val, k = indC(i), l = i;
+            }
+        }
+
+        Type p = A(M*k + l);
+        if (fabs(p) <= FLT_EPSILON)
+            break;
+        
+        Type y = static_cast<Type>((eigen_values(l) - eigen_values(k))*0.5);
+        Type t = fabs(y) + hypot(p, y);
+        Type s = hypot(p, t);
+        Type c = t / s;
+        s = p / s; t = (p / t)*p;
+
+        if (y < 0)
+        {
+            s = -s, t = -t;
+        }
+        A(M*k + l) = 0;
+
+        eigen_values(k) -= t;
+        eigen_values(l) += t;
+
+        Type a0, b0;
+
+#undef rotate
+#define rotate(v0, v1) a0 = v0, b0 = v1, v0 = a0*c - b0*s, v1 = a0*s + b0*c
+
+        // rotate rows and columns k and l
+        for (i = 0; i < k; i++)
+            rotate(A(M*i + k), A(M*i + l));
+        for (i = k + 1; i < l; i++)
+            rotate(A(M*k + i), A(M*i + l));
+        for (i = l + 1; i < M; i++)
+            rotate(A(M*k + i), A(M*l + i));
+
+        // rotate eigenvectors
+        for (i = 0; i < M; i++)
+            rotate(V(M*k+i), V(M*l+i));
+#undef rotate
+
+        for (size_t j = 0; j < 2; j++) 
+        {
+            size_t idx = j == 0 ? k : l;
+            if (idx < M - 1) 
+            {
+                for (m = idx + 1, mv = fabs(A(M*idx + m)), i = idx + 2; i < M; i++) 
+                {
+                    Type val = fabs(A(M*idx + i));
+                    if (mv < val)
+                    {
+                        mv = val, m = i;
+                    }
+                }
+                indR(idx) = m;
+            }
+
+            if (idx > 0) 
+            {
+                for (m = 0, mv = fabs(A(idx)), i = 1; i < idx; i++)
+                    {
+                    Type val = fabs(A(M*i + idx));
+                    if (mv < val)
+                    {
+                        mv = val, m = i;
+                    }
+                }
+                indC(idx) = m;
+            }
+        }
+    }
+
+    
+    if (sort_) 
+    {
+        for (size_t k = 0; k < M - 1; k++) 
+        {
+            size_t m = k;
+            for (size_t i = k + 1; i < M; i++) 
+            {
+                if (eigen_values(m) < eigen_values(i))
+                {
+                    m = i;
+                }
+            }
+
+            if (k != m) 
+            {
+                swap(eigen_values(m), eigen_values(k));
+                for (size_t i = 0; i < M; i++)
+                {
+                    swap(V(M*m+i), V(M*k+i));
+                }
+            }
+        }
+    }
+
+	for (size_t i = 0; i < M; ++i) 
+    {
+        for (size_t j = 0; j < M; ++j)
+        {
+            eigen_vectors(i, j) = V(i * M + j); 
+        }
+	}
+ 
+	return 0;
+
+}
+
 typedef SquareMatrix<float, 3> Matrix3f;
 
 } // namespace matrix

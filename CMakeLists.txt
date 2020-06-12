@@ -62,7 +62,7 @@ add_compile_options(
     -Wconversion
     -Wctor-dtor-privacy
     -Wdisabled-optimization
-    -Werror
+#    -Werror
     -Wextra
     -Wfloat-equal
     -Wformat-security
